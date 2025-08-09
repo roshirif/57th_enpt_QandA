@@ -93,6 +93,36 @@
       font-weight: bold;
       margin-right: 6px;
     }
+
+    
+    @media (max-width: 600px) {
+      /* スマホ画面幅600px以下の時 */
+    
+      /* 日時列（1列目）を狭く */
+      table.dataTable th:nth-child(1),
+      table.dataTable td:nth-child(1) {
+        width: 10% !important;
+      }
+    
+      /* 担当役職列（2列目）も狭く */
+      table.dataTable th:nth-child(2),
+      table.dataTable td:nth-child(2) {
+        width: 15% !important;
+      }
+    
+      /* 質問内容列（3列目）を広く */
+      table.dataTable th:nth-child(3),
+      table.dataTable td:nth-child(3) {
+        width: 40% !important;
+      }
+    
+      /* 回答列（4列目）を広く */
+      table.dataTable th:nth-child(4),
+      table.dataTable td:nth-child(4) {
+        width: 35% !important;
+      }
+    }
+
   </style>
 </head>
 <body>
