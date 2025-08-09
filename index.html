@@ -1,85 +1,165 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Q&A一覧</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Q&A一覧</title>
 
-<!-- DataTables CSS -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
-<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.dataTables.min.css">
+  <!-- DataTables CSS（CDN） -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
 
-<style>
-  body{font-family:system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; padding:12px; }
-  h1{font-size:1.4rem; margin-bottom:10px;}
-  .note{font-size:0.9rem;color:#666;margin-bottom:10px;}
-  table.dataTable td{word-break:break-word;}
-  @media (max-width:600px){
-    h1{font-size:1.1rem;}
-  }
-  .error {color:#b00;}
-</style>
-</head>
-<body>
-  <h1>質問一覧</h1>
-  <div class="note">※最新の公開分のみ表示されます</div>
-  <div id="status">読み込み中…</div>
-  <table id="qaTable" class="display responsive nowrap" style="width:100%; display:none;">
-    <thead>
-      <tr>
-        <th>日時</th>
-        <th>質問者</th>
-        <th>宛先</th>
-        <th>質問</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-
-  <!-- jQuery + DataTables -->
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-  <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
-
-  <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbzQEzqei00rjgpCLIp0l4YVq4Rg3-z0HRrdrft4OZyZ3m1SUKBA8COOI9tceMhS4l41Vw/exec";
-
-    function showError(msg){
-      document.getElementById('status').innerHTML = '<div class="error">'+msg+'</div>';
+  <style>
+    /* スマホでも見やすい最低限のスタイル */
+    body {
+      font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "メイリオ", Arial, sans-serif;
+      margin: 12px;
+      background: #f7fbff;
+      color: #222;
+    }
+    h1 {
+      font-size: 1.25rem;
+      margin-bottom: 8px;
     }
 
-    fetch(API_URL)
-      .then(r => {
-        if(!r.ok) throw new Error('ネットワークエラー: ' + r.status);
-        return r.json();
-      })
-      .then(data => {
-        if(!Array.isArray(data)) throw new Error('返ってきたデータが配列ではありません');
-        if(data.length===0){
-          document.getElementById('status').textContent = '公開されている質問はまだありません';
-          return;
-        }
-        const tbody = data.map(row => `
-          <tr>
-            <td>${row["タイムスタンプ"] || ''}</td>
-            <td>${row["質問する人の名前（匿名でも可）"] || ''}</td>
-            <td>${row["誰への質問か"] || ''}</td>
-            <td>${row["質問内容"] || ''}</td>
-          </tr>
-        `).join('');
-        document.querySelector('#qaTable tbody').innerHTML = tbody;
-        document.getElementById('status').style.display = 'none';
-        document.getElementById('qaTable').style.display = 'table';
-        $('#qaTable').DataTable({
-          order: [[0,'desc']],
-          responsive: true,
-          language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ja.json" }
+    /* テーブルを包むボックス */
+    .table-wrap {
+      background: white;
+      padding: 8px;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(20,30,60,0.06);
+    }
+
+    /* DataTables デフォルトを少し整える */
+    table.dataTable thead th {
+      background: linear-gradient(#fbfdff, #eef6ff);
+    }
+
+    /* 小さい画面で改行しやすく */
+    td {
+      word-break: break-word;
+      vertical-align: top;
+    }
+
+    /* 読み込み中メッセージ */
+    #loading {
+      margin: 10px 0;
+      color: #666;
+    }
+
+    /* エラー表示 */
+    #error {
+      color: #b00020;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Q＆A一覧</h1>
+  <div id="loading">読み込み中…</div>
+  <div id="error" style="display:none;"></div>
+
+  <div class="table-wrap" style="display:none" id="tableContainer">
+    <table id="qnaTable" class="display" style="width:100%">
+      <thead>
+        <tr>
+          <th>日時</th>
+          <th>質問内容</th>
+          <th>回答</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- jQuery & DataTables JS（CDN） -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+
+  <script>
+    // ← ここをあなたのApps ScriptのWebアプリURLに置き換えてください
+    const apiURL = "https://script.google.com/macros/s/AKfycbzQEzqei00rjgpCLIp0l4YVq4Rg3-z0HRrdrft4OZyZ3m1SUKBA8COOI9tceMhS4l41Vw/exec";
+
+    // JSONのキー名（スプレッドシートのヘッダー名）に合わせて変更可能。
+    // 画像からの推測: "日時","質問内容","回答"
+    const KEY_DATETIME = "日時";
+    const KEY_QUESTION = "質問内容";
+    const KEY_ANSWER = "回答";
+
+    // ページ読み込み時にデータ取得して表に入れる
+    $(document).ready(function() {
+      fetchDataAndRender();
+    });
+
+    function fetchDataAndRender() {
+      $('#loading').show();
+      $('#error').hide();
+      $('#tableContainer').hide();
+
+      fetch(apiURL)
+        .then(res => {
+          if (!res.ok) throw new Error("ネットワークエラー: " + res.status);
+          return res.json();
+        })
+        .then(data => {
+          // data は配列のはず。念のためチェック
+          if (!Array.isArray(data)) throw new Error("取得データが配列ではありません");
+
+          // テーブル本体を作る
+          const rowsHtml = data.map(item => {
+            // ヘッダー名が違う可能性があるので安全に取得
+            const dt = item[KEY_DATETIME] ?? item["Timestamp"] ?? item["タイムスタンプ"] ?? "";
+            const q  = item[KEY_QUESTION] ?? item["質問"] ?? item["question"] ?? "";
+            const a  = item[KEY_ANSWER] ?? item["回答"] ?? item["answer"] ?? "";
+
+            return `<tr>
+                      <td>${escapeHtml(dt)}</td>
+                      <td>${escapeHtml(q)}</td>
+                      <td>${escapeHtml(a)}</td>
+                    </tr>`;
+          }).join("");
+
+          $('#qnaTable tbody').html(rowsHtml);
+
+          // DataTable 初期化（既に初期化済みなら再初期化を避ける）
+          if ( $.fn.dataTable.isDataTable('#qnaTable') ) {
+            $('#qnaTable').DataTable().clear().destroy();
+          }
+
+          $('#qnaTable').DataTable({
+            "order": [[0, "desc"]],   // 初期ソート: 日時降順
+            "pageLength": 10,
+            "lengthMenu": [5,10,25,50],
+            "language": {
+              "search": "検索:",
+              "lengthMenu": "表示件数 MENU 件",
+              "info": " TOTAL 件中 START から END まで表示",
+              "paginate": {"next":"次","previous":"前"}
+            },
+            "columnDefs": [
+              { "targets": [0,1,2], "defaultContent": "" }
+            ]
+          });
+
+          $('#loading').hide();
+          $('#tableContainer').show();
+        })
+        .catch(err => {
+          $('#loading').hide();
+          $('#error').text("データ取得エラー: " + err.message).show();
+          console.error(err);
         });
-      })
-      .catch(err => {
-        console.error(err);
-        showError('データ取得に失敗しました。再読み込みしてください。');
-      });
+    }
+
+    // XSS対策の簡易エスケープ
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return "";
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
   </script>
 </body>
 </html>
