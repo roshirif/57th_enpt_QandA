@@ -59,33 +59,51 @@
       word-wrap: break-word; /* 長い単語を折り返す */
     }
 
-    /* 日時列 */
+    /* 日時列（1列目） */
     table.dataTable th:nth-child(1),
     table.dataTable td:nth-child(1) {
       width: 15%;
     }
 
-    /* 質問内容列 */
+    /* 担当役職列（2列目） */
     table.dataTable th:nth-child(2),
     table.dataTable td:nth-child(2) {
-      width: 45%;
+      width: 20%;
     }
 
-    /* 回答列 */
+    /* 質問内容列（3列目） */
     table.dataTable th:nth-child(3),
     table.dataTable td:nth-child(3) {
-      width: 20%;
+      width: 40%;
     }
 
-    /* 担当役職列 */
+    /* 回答列（4列目） */
     table.dataTable th:nth-child(4),
     table.dataTable td:nth-child(4) {
-      width: 20%;
+      width: 25%;
+    }
+
+    /* 役職絞り込みセレクトのスタイル（ちょっと余白） */
+    #roleFilter {
+      margin-bottom: 12px;
+      padding: 4px 8px;
+      font-size: 1rem;
+    }
+    label[for="roleFilter"] {
+      font-weight: bold;
+      margin-right: 6px;
     }
   </style>
 </head>
 <body>
   <h1>Q＆A一覧</h1>
+
+  <!-- ここに役職絞り込みセレクトを追加 -->
+  <label for="roleFilter">役職で絞り込み：</label>
+  <select id="roleFilter">
+    <option value="">すべて</option>
+  </select>
+
   <div id="loading">読み込み中…</div>
   <div id="error" style="display:none;"></div>
 
@@ -121,18 +139,24 @@
       return String(val).slice(0, 10).replace(/-/g, '/');
     }
 
-    // ← ここをあなたのApps ScriptのWebアプリURLに置き換えてください
-    const apiURL = "https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLjVHI8IsT4k-Szr6lifGsE7AsmOHl2leIEJFx5xaw-vgInaFQCEHNnKqWOWBH0VyVfHJfmioKREm_PIKMxTAX0z4EBsJePXq9kWe22fvCPNbG081pVq8yARYotYRUB8EL6ZQgozoXp7DQw9k5n-shDL0SMUEkfDFwNPaAC-mPNMi-QoM1OrIPNNhzC0VZQz9ERPsOfaep2S0X8LRVqkDE02M1dR8shNXoMyZYyqWvfhGdzdH2MFSUkj1c5ZaWXkOQfssdL2P_sH-0YHAT9iDp9L2zYZj5vv_XG-OJod&lib=MFpjrwhdvOnkvXxRHX2Dj7moQQNnbGCso";
+    // ここをあなたのApps ScriptのWebアプリURLに置き換えてください
+    const apiURL = "https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLgDLzxz_9kMGlmXQkVhA54pJz87fIeROMa5Acqo31lpkGAkCNsK5vDkVIViq6h3mupWuPrFnxb06tGJTOyWx4wEqERRYoNfriJxkW2wYyAEeZii3aGc9kJ4k8ql2-Wyczm_p6XhaVgP99nVGaFSFtsO00fsQIq1tRLh3VvNKsTKmZiWDv3FJN_PChv_CZrg7llRSOFL7mZTveBJTaPGJTLE77RD32QZrWA_1B5RtPaUt2OdhNJ-Ji209CuajZ9IYM5wX7QpZVladJmthOgh4f4IH4DXgYlLX_3l9RVN&lib=MFpjrwhdvOnkvXxRHX2Dj7moQQNnbGCso";
 
-    // JSONのキー名（スプレッドシートのヘッダー名）に合わせて変更可能。
+    // JSONのキー名（スプレッドシートのヘッダー名）に合わせて変更可能
     const KEY_DATETIME = "日時";
     const KEY_QUESTION = "質問内容";
     const KEY_ANSWER = "回答";
-    const KEY_ROLE = "担当役職";
+    const KEY_ROLE = "担当役職";  // 役職列のキー
 
-    // ページ読み込み時にデータ取得して表に入れる
     $(document).ready(function() {
       fetchDataAndRender();
+
+      // 役職絞り込み選択肢変更時
+      $('#roleFilter').on('change', function() {
+        const val = $(this).val();
+        // 役職列は2列目（index 1）なので1を指定して検索
+        $('#qnaTable').DataTable().column(1).search(val).draw();
+      });
     });
 
     function fetchDataAndRender() {
@@ -148,6 +172,9 @@
         .then(data => {
           if (!Array.isArray(data)) throw new Error("取得データが配列ではありません");
 
+          // 役職のセット作成（重複なし）
+          const roleSet = new Set();
+
           const rowsHtml = data.map(item => {
             let dtRaw = item[KEY_DATETIME] ?? item["Timestamp"] ?? item["タイムスタンプ"] ?? "";
             let dt = formatDateOnly(dtRaw);
@@ -161,6 +188,8 @@
               a = escapeHtml(a);
             }
 
+            if (r) roleSet.add(r);
+
             return `<tr>
                       <td>${escapeHtml(dt)}</td>
                       <td>${escapeHtml(r)}</td>
@@ -171,7 +200,16 @@
 
           $('#qnaTable tbody').html(rowsHtml);
 
-          if ( $.fn.dataTable.isDataTable('#qnaTable') ) {
+          // 役職絞り込みセレクトに選択肢を追加
+          const roleArray = Array.from(roleSet).sort();
+          const $roleFilter = $('#roleFilter');
+          // 「すべて」以外をクリア
+          $roleFilter.find('option:not(:first)').remove();
+          roleArray.forEach(role => {
+            $roleFilter.append($('<option>').val(role).text(role));
+          });
+
+          if ($.fn.dataTable.isDataTable('#qnaTable')) {
             $('#qnaTable').DataTable().clear().destroy();
           }
 
@@ -206,7 +244,7 @@
         });
     }
 
-    // XSS対策の簡易エスケープ
+    // 簡易XSS対策エスケープ
     function escapeHtml(str) {
       if (str === null || str === undefined) return "";
       return String(str)
