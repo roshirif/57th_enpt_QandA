@@ -51,6 +51,37 @@
       color: #b00020;
       margin: 10px 0;
     }
+
+    /* 列幅＆テーブル調整 */
+    table.dataTable {
+      width: 100% !important;
+      table-layout: fixed; /* 列幅を固定レイアウトにする */
+      word-wrap: break-word; /* 長い単語を折り返す */
+    }
+
+    /* 日時列 */
+    table.dataTable th:nth-child(1),
+    table.dataTable td:nth-child(1) {
+      width: 15%;
+    }
+
+    /* 質問内容列 */
+    table.dataTable th:nth-child(2),
+    table.dataTable td:nth-child(2) {
+      width: 45%;
+    }
+
+    /* 回答列 */
+    table.dataTable th:nth-child(3),
+    table.dataTable td:nth-child(3) {
+      width: 20%;
+    }
+
+    /* 担当役職列 */
+    table.dataTable th:nth-child(4),
+    table.dataTable td:nth-child(4) {
+      width: 20%;
+    }
   </style>
 </head>
 <body>
@@ -63,6 +94,7 @@
       <thead>
         <tr>
           <th>日時</th>
+          <th>担当役職</th>
           <th>質問内容</th>
           <th>回答</th>
         </tr>
@@ -76,14 +108,27 @@
   <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
 
   <script>
+    // 日付を yyyy/mm/dd に整形する関数
+    function formatDateOnly(val) {
+      if (!val) return "";
+      let d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        let y = d.getFullYear();
+        let m = String(d.getMonth() + 1).padStart(2, '0');
+        let day = String(d.getDate()).padStart(2, '0');
+        return `${y}/${m}/${day}`;
+      }
+      return String(val).slice(0, 10).replace(/-/g, '/');
+    }
+
     // ← ここをあなたのApps ScriptのWebアプリURLに置き換えてください
-    const apiURL = "https://script.google.com/macros/s/AKfycbzQEzqei00rjgpCLIp0l4YVq4Rg3-z0HRrdrft4OZyZ3m1SUKBA8COOI9tceMhS4l41Vw/exec";
+    const apiURL = "https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLjVHI8IsT4k-Szr6lifGsE7AsmOHl2leIEJFx5xaw-vgInaFQCEHNnKqWOWBH0VyVfHJfmioKREm_PIKMxTAX0z4EBsJePXq9kWe22fvCPNbG081pVq8yARYotYRUB8EL6ZQgozoXp7DQw9k5n-shDL0SMUEkfDFwNPaAC-mPNMi-QoM1OrIPNNhzC0VZQz9ERPsOfaep2S0X8LRVqkDE02M1dR8shNXoMyZYyqWvfhGdzdH2MFSUkj1c5ZaWXkOQfssdL2P_sH-0YHAT9iDp9L2zYZj5vv_XG-OJod&lib=MFpjrwhdvOnkvXxRHX2Dj7moQQNnbGCso";
 
     // JSONのキー名（スプレッドシートのヘッダー名）に合わせて変更可能。
-    // 画像からの推測: "日時","質問内容","回答"
     const KEY_DATETIME = "日時";
     const KEY_QUESTION = "質問内容";
     const KEY_ANSWER = "回答";
+    const KEY_ROLE = "担当役職";
 
     // ページ読み込み時にデータ取得して表に入れる
     $(document).ready(function() {
@@ -101,42 +146,53 @@
           return res.json();
         })
         .then(data => {
-          // data は配列のはず。念のためチェック
           if (!Array.isArray(data)) throw new Error("取得データが配列ではありません");
 
-          // テーブル本体を作る
           const rowsHtml = data.map(item => {
-            // ヘッダー名が違う可能性があるので安全に取得
-            const dt = item[KEY_DATETIME] ?? item["Timestamp"] ?? item["タイムスタンプ"] ?? "";
+            let dtRaw = item[KEY_DATETIME] ?? item["Timestamp"] ?? item["タイムスタンプ"] ?? "";
+            let dt = formatDateOnly(dtRaw);
             const q  = item[KEY_QUESTION] ?? item["質問"] ?? item["question"] ?? "";
-            const a  = item[KEY_ANSWER] ?? item["回答"] ?? item["answer"] ?? "";
+            let a  = item[KEY_ANSWER] ?? item["回答"] ?? item["answer"] ?? "";
+            const r  = item[KEY_ROLE] ?? item["担当役職"] ?? item["role"] ?? "";
+
+            if (a === "未回答") {
+              a = `<span style="color:red;">${escapeHtml(a)}</span>`;
+            } else {
+              a = escapeHtml(a);
+            }
 
             return `<tr>
                       <td>${escapeHtml(dt)}</td>
+                      <td>${escapeHtml(r)}</td>
                       <td>${escapeHtml(q)}</td>
-                      <td>${escapeHtml(a)}</td>
+                      <td>${a}</td>
                     </tr>`;
           }).join("");
 
           $('#qnaTable tbody').html(rowsHtml);
 
-          // DataTable 初期化（既に初期化済みなら再初期化を避ける）
           if ( $.fn.dataTable.isDataTable('#qnaTable') ) {
             $('#qnaTable').DataTable().clear().destroy();
           }
 
           $('#qnaTable').DataTable({
-            "order": [[0, "desc"]],   // 初期ソート: 日時降順
+            "order": [[0, "desc"]],
             "pageLength": 10,
             "lengthMenu": [5,10,25,50],
             "language": {
               "search": "検索:",
-              "lengthMenu": "表示件数 MENU 件",
-              "info": " TOTAL 件中 START から END まで表示",
-              "paginate": {"next":"次","previous":"前"}
+              "lengthMenu": "表示件数 _MENU_ 件",
+              "info": "_TOTAL_ 件中 _START_ から _END_ まで表示",
+              "infoEmpty": "0 件中 0 から 0 まで表示",
+              "infoFiltered": "（全 _MAX_ 件からフィルタリング）",
+              "paginate": {
+                "next": "次",
+                "previous": "前"
+              },
+              "zeroRecords": "該当するデータがありません"
             },
             "columnDefs": [
-              { "targets": [0,1,2], "defaultContent": "" }
+              { "targets": [0,1,2,3], "defaultContent": "" }
             ]
           });
 
